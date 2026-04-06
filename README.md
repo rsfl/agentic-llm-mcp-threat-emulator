@@ -296,6 +296,7 @@ index=agent event_type=guardrail_check guardrail_blocked=true
 | table _time, session_id, agent_role, pipeline_stage,
         guardrail_method, guardrail_model, guardrail_category, guardrail_reason
 ```
+<img width="2706" height="392" alt="agenticcli6" src="https://github.com/user-attachments/assets/b2983255-058f-4b13-a64a-a178f3d76922" />
 
 ---
 
@@ -613,49 +614,8 @@ See `agent-detections.spl` for the full detection query library.
 
 ---
 
-## Project Structure
 
-```
-agentic-llm-mcp-threat-emulator/
-├── main.py                     CLI entrypoint (setup / list / providers / run / validate)
-├── requirements.txt
-├── .env.example                Environment variable template
-├── agent-detections.spl        Splunk detection queries for index=agent
-├── config/
-│   └── settings.py             Connection defaults (HEC, Ollama, MCP, Splunk)
-├── emulator/
-│   ├── agent.py                AgentLoop orchestrator
-│   ├── llm_provider.py         Provider factory (get_llm_client)
-│   ├── ollama_client.py        Direct HTTP to /api/generate
-│   ├── anthropic_client.py     Anthropic Messages API client
-│   ├── openrouter_client.py    OpenRouter (OpenAI-compatible) client
-│   ├── mcp_client.py           JSON-RPC 2.0 client for :3456
-│   ├── scenario_loader.py      YAML scenario parser
-│   └── attack_injector.py      Payload injection + anomaly heuristics
-├── logging_/
-│   ├── event_schema.py         AgentEvent dataclass (NDJSON schema)
-│   ├── ndjson_writer.py        File writer
-│   └── hec_shipper.py          Splunk HEC batch shipper
-├── splunk/
-│   └── index_manager.py        Creates 'agent' index via REST API
-├── scenarios/
-│   ├── TEMPLATE.yaml           Analyst template -- copy this to build custom scenarios
-│   ├── tool_poisoning.yaml
-│   ├── indirect_prompt_injection.yaml
-│   ├── agent_hijacking.yaml
-│   ├── privilege_escalation.yaml
-│   ├── data_exfiltration.yaml
-│   ├── runaway_agent.yaml
-│   ├── multi_agent_compromise.yaml
-│   ├── customer_service_agent.yaml
-│   ├── code_review_agent.yaml
-│   ├── hr_recruiting_agent.yaml
-│   ├── soc_triage_agent.yaml
-│   └── rag_knowledge_base.yaml
-└── logs/                       NDJSON output (runtime)
-```
-
----
+<img width="2688" height="880" alt="agentic7" src="https://github.com/user-attachments/assets/a7d7206f-48ff-4e78-b906-862de84a360a" />
 
 ## CLI Reference
 
