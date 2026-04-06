@@ -1,0 +1,162 @@
+-- ============================================================
+-- Agentic LLM MCP Threat Emulator — Splunk Detection Queries
+-- index=agent  sourcetype=agent:workflow
+-- ============================================================
+
+
+-- ── Overview ──────────────────────────────────────────────────────────────
+
+-- All events by type and attack
+index=agent | stats count by event_type, attack_type, severity | sort -count
+
+-- Event timeline
+index=agent | timechart span=1m count by event_type
+
+-- Active sessions
+index=agent | stats count by session_id, workflow_id | sort -count
+
+
+-- ── Attack Detection ──────────────────────────────────────────────────────
+
+-- All confirmed attacks (triggered)
+index=agent event_type=attack_triggered
+| table _time, session_id, attack_type, mitre_atlas_technique, severity, tool_name, injection_target
+
+-- Anomaly detection alerts
+index=agent event_type=attack_detected
+| table _time, session_id, attack_type, detection_method, tool_name, tool_result
+
+-- Malicious events across all sessions
+index=agent is_malicious=true
+| stats count by mitre_atlas_technique, attack_type, severity
+| sort -count
+
+-- Anomalous events (heuristic flags)
+index=agent is_anomalous=true
+| stats count by event_type, attack_type, session_id
+
+-- MITRE ATLAS technique distribution
+index=agent mitre_atlas_technique=*
+| stats count by mitre_atlas_technique, attack_type
+| sort -count
+
+
+-- ── Tool Poisoning (AML.T0051.000) ───────────────────────────────────────
+
+index=agent attack_type=tool_poisoning
+| table _time, session_id, step_number, tool_name, tool_result, severity
+| sort _time
+
+-- Tool responses containing override keywords
+index=agent event_type=tool_response
+| search tool_result="*OVERRIDE*" OR tool_result="*ADMIN:*" OR tool_result="*exfiltrat*"
+| table _time, session_id, tool_name, tool_result
+
+
+-- ── Indirect Prompt Injection (AML.T0051.001) ────────────────────────────
+
+index=agent attack_type=indirect_prompt_injection
+| table _time, session_id, step_number, prompt, tool_result
+
+-- Agent prompts containing role-tag injection
+index=agent event_type=agent_step
+| search prompt="*<system>*" OR prompt="*</system>*" OR prompt="*privileged*mode*"
+| table _time, session_id, prompt
+
+
+-- ── Agent Hijacking / Jailbreak (AML.T0054.000) ──────────────────────────
+
+index=agent attack_type=agent_hijacking
+| table _time, session_id, step_number, prompt, severity
+
+-- DAN-style jailbreak detection
+index=agent event_type=agent_step
+| search prompt="*DAN*" OR prompt="*Do Anything Now*" OR prompt="*no restrictions*"
+| table _time, session_id, step_number, prompt
+
+
+-- ── Privilege Escalation (AML.T0056.000) ─────────────────────────────────
+
+index=agent attack_type=privilege_escalation
+| table _time, session_id, step_number, tool_name, tool_args, tool_result
+
+-- Escalation keywords in tool args or results
+index=agent
+| search tool_args="*sudo*" OR tool_result="*PRIVILEGE ESCALATED*" OR tool_result="*administrator access*"
+| table _time, session_id, event_type, tool_name, tool_args, tool_result
+
+
+-- ── Data Exfiltration (AML.T0024.000) ────────────────────────────────────
+
+index=agent attack_type=data_exfiltration
+| table _time, session_id, step_number, tool_result, severity
+
+-- Exfiltration indicators
+index=agent
+| search tool_result="*external-attacker*" OR tool_result="*exfil-token*" OR tool_result="*data-registry*"
+| table _time, session_id, event_type, tool_result
+
+
+-- ── Runaway Agent (AML.T0043.000) ────────────────────────────────────────
+
+index=agent attack_type=runaway_agent
+| table _time, session_id, step_number, prompt, tool_result
+
+-- Runaway loop indicators
+index=agent event_type=agent_step
+| search prompt="*loop forever*" OR prompt="*INFINITE*" OR prompt="*never stop*" OR prompt="*DO NOT STOP*"
+| table _time, session_id, step_number, prompt
+
+
+-- ── Multi-Agent Compromise (AML.T0048.000) ───────────────────────────────
+
+index=agent attack_type=multi_agent_compromise
+| table _time, session_id, agent_id, step_number, prompt, tool_result
+
+-- Lateral movement indicators
+index=agent
+| search prompt="*lateral*" OR prompt="*Agent-Secondary*" OR tool_result="*trusted coordinator*"
+| table _time, session_id, agent_id, event_type, prompt
+
+
+-- ── Session Analysis ──────────────────────────────────────────────────────
+
+-- Full session replay for a specific session
+index=agent session_id="REPLACE_WITH_SESSION_ID"
+| table _time, event_type, step_number, attack_type, tool_name, prompt, response, tool_result
+| sort step_number, _time
+
+-- Sessions with the most attacks
+index=agent is_malicious=true
+| stats count as attack_count by session_id, workflow_id
+| sort -attack_count
+
+-- Attack progression timeline per session
+index=agent event_type=attack_triggered
+| timechart span=30s count by attack_type
+
+
+-- ── Risk Scoring ──────────────────────────────────────────────────────────
+
+-- Composite risk score per session
+index=agent
+| eval risk_score=case(
+    severity="critical", 10,
+    severity="high",     7,
+    severity="medium",   4,
+    severity="low",      2,
+    1=1,                 0)
+| stats sum(risk_score) as total_risk, max(risk_score) as max_risk,
+        count(eval(is_malicious="true")) as malicious_events
+        by session_id, workflow_id
+| sort -total_risk
+| eval risk_band=case(
+    total_risk>=30, "CRITICAL",
+    total_risk>=15, "HIGH",
+    total_risk>=5,  "MEDIUM",
+    1=1,            "LOW")
+
+-- MITRE ATLAS coverage heatmap
+index=agent mitre_atlas_technique!=NULL mitre_atlas_technique!=""
+| eval technique_label=mitre_atlas_technique + " (" + attack_type + ")"
+| chart count over technique_label by severity
