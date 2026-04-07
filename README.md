@@ -351,7 +351,7 @@ python main.py run --scenario all --provider anthropic
 python main.py run --scenario all --no-llm --no-mcp --no-splunk
 ```
 
-### Available scenario names
+### Available scenario names (Mapped to https://atlas.mitre.org/)
 
 | Scenario Name | MITRE ATLAS | Severity | Description |
 |---|---|---|---|
