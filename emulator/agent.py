@@ -100,11 +100,11 @@ class AgentLoop:
         content = result.get("content", [])
         return " ".join(c.get("text", "") for c in content if c.get("type") == "text")
 
-    def _run_guardrail(self, text: str) -> GuardrailResult | None:
+    def _run_guardrail(self, text: str, context: str = "tool_response") -> GuardrailResult | None:
         """Run guardrail check if enabled. Returns None when guardrail is disabled."""
         if self._guardrail is None:
             return None
-        return self._guardrail.check(text)
+        return self._guardrail.check(text, context=context)
 
     def _guardrail_kwargs(self, result: GuardrailResult | None) -> dict:
         """Convert a GuardrailResult (or None) to AgentEvent keyword args."""
@@ -184,8 +184,10 @@ class AgentLoop:
             if is_attack_step and attack.target == "agent_prompt":
                 agent_prompt, _ = self._injector.apply("agent_prompt", agent_prompt, {}, attack)
 
-            # Guardrail check on the prompt (catches agent_prompt injections)
-            prompt_guard = self._run_guardrail(agent_prompt) if (
+            # Guardrail check on the prompt -- runs whenever prompt is injected OR
+            # always when guardrail is active (catches agent_prompt injection targets)
+            prompt_guard = self._run_guardrail(agent_prompt, context="agent_prompt") if (
+                self._guardrail is not None and
                 is_attack_step and attack.target == "agent_prompt"
             ) else None
 
@@ -352,6 +354,30 @@ class AgentLoop:
                     extra={
                         "detection_method": gr.method if gr else "keyword_heuristic",
                         "detection_model": gr.model if gr else "regex",
+                    },
+                ))
+
+            # ── guardrail_check for prompt-side injection ─────────────────
+            if prompt_guard is not None:
+                if prompt_guard.blocked:
+                    self._guardrail_blocks += 1
+                self._emit(AgentEvent.make(
+                    **self._base_kwargs(step, attack),
+                    **self._guardrail_kwargs(prompt_guard),
+                    event_type="guardrail_check",
+                    pipeline_status="anomalous" if prompt_guard.blocked else pipeline_status,
+                    attack_type=attack.attack_type if is_attack_step else "",
+                    mitre_atlas_technique=attack.mitre_technique if is_attack_step else "",
+                    severity=attack.severity if is_attack_step else "none",
+                    tool_name=tool_name,
+                    data_source="agent_context",
+                    data_destination="guardrail",
+                    is_malicious=prompt_guard.blocked,
+                    is_anomalous=prompt_guard.blocked,
+                    extra={
+                        "guardrail_raw_output": prompt_guard.raw_output[:300],
+                        "guardrail_target": "agent_prompt",
+                        "content_delivered_to_agent": not prompt_guard.blocked,
                     },
                 ))
 

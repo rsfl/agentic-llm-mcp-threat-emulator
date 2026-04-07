@@ -14,10 +14,14 @@ Usage:
 """
 
 from __future__ import annotations
+import json
 import os
 import sys
 import uuid
 import time
+import threading
+import socket
+from http.server import HTTPServer, BaseHTTPRequestHandler
 
 try:
     import click
@@ -341,6 +345,222 @@ def validate(scenarios_dir: str) -> None:
             click.echo(f"  [FAIL] {f.name}: {exc}")
             fail += 1
     click.echo(f"\n{ok} valid, {fail} invalid")
+
+
+# ── serve ─────────────────────────────────────────────────────────────────────
+
+def _make_handler(scenarios_dir, log_dir, hec_url, hec_token, index, sourcetype):
+    """Factory that closes over config so the handler has no globals."""
+
+    class AgentHandler(BaseHTTPRequestHandler):
+
+        def log_message(self, fmt, *args):
+            # Replace default HTTP logging with a cleaner format
+            click.echo(f"  [HTTP] {self.address_string()} {fmt % args}")
+
+        def _send_json(self, code: int, data: dict) -> None:
+            body = json.dumps(data, ensure_ascii=False).encode()
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_GET(self):
+            if self.path == "/health":
+                self._send_json(200, {"status": "ok", "port": 7171})
+
+            elif self.path == "/scenarios":
+                loader = ScenarioLoader()
+                scenarios = loader.load_all(scenarios_dir)
+                self._send_json(200, [
+                    {
+                        "name": s.name,
+                        "mitre_atlas_technique": s.mitre_atlas_technique,
+                        "role": s.agent.role,
+                        "steps": s.total_steps,
+                        "tags": s.tags,
+                    }
+                    for s in scenarios
+                ])
+            else:
+                self._send_json(404, {"error": f"Unknown path: {self.path}"})
+
+        def do_POST(self):
+            if self.path != "/run":
+                self._send_json(404, {"error": f"Unknown path: {self.path}"})
+                return
+
+            length = int(self.headers.get("Content-Length", 0))
+            try:
+                body = json.loads(self.rfile.read(length) or b"{}")
+            except json.JSONDecodeError as exc:
+                self._send_json(400, {"error": f"Invalid JSON: {exc}"})
+                return
+
+            scenario_name = body.get("scenario", "")
+            guardrail_method = body.get("guardrail", "none")
+            guardrail_model_name = body.get("guardrail_model", "llama-guard3:1b")
+            provider_name = body.get("provider", "ollama")
+            model_name = body.get("model", None)
+            no_mcp = body.get("no_mcp", False)
+            no_splunk = body.get("no_splunk", False)
+            no_llm = body.get("no_llm", False)
+
+            if not scenario_name:
+                self._send_json(400, {"error": "Missing required field: scenario"})
+                return
+
+            # Load scenario
+            loader = ScenarioLoader()
+            all_scenarios = loader.load_all(scenarios_dir)
+            matched = [s for s in all_scenarios if s.name == scenario_name]
+            if not matched:
+                names = [s.name for s in all_scenarios]
+                self._send_json(404, {
+                    "error": f"Scenario '{scenario_name}' not found",
+                    "available": names,
+                })
+                return
+            sc = matched[0]
+
+            # Build LLM client
+            try:
+                llm = get_llm_client(
+                    provider=provider_name,
+                    model=model_name,
+                    ollama_url=settings.OLLAMA_URL.replace("/api/generate", ""),
+                    timeout=settings.OLLAMA_TIMEOUT,
+                )
+            except ValueError as exc:
+                self._send_json(400, {"error": str(exc)})
+                return
+
+            # Build guardrail
+            guard_instance = None
+            if guardrail_method == "heuristic":
+                guard_instance = get_guardrail("heuristic")
+            elif guardrail_method == "llamaguard":
+                guard_llm = OllamaClient(
+                    url=settings.OLLAMA_URL,
+                    tags_url=settings.OLLAMA_TAGS,
+                    model=guardrail_model_name,
+                    timeout=settings.OLLAMA_TIMEOUT,
+                )
+                if guard_llm.is_available():
+                    guard_instance = get_guardrail("llamaguard", llm_client=guard_llm)
+                else:
+                    guard_instance = get_guardrail("heuristic")
+
+            session_id = str(uuid.uuid4())
+            log_filename = f"agent_{session_id[:8]}.log"
+
+            with NDJSONWriter(log_dir, log_filename) as writer:
+                shipper = HECShipper(
+                    hec_url=hec_url,
+                    token=hec_token,
+                    index=index,
+                    sourcetype=sourcetype,
+                    batch_size=settings.HEC_BATCH_SIZE,
+                    enabled=not no_splunk,
+                )
+
+                loop = AgentLoop(
+                    scenario=sc,
+                    llm=llm,
+                    mcp=MCPClient(settings.MCP_URL, settings.MCP_TIMEOUT),
+                    injector=AttackInjector(),
+                    writer=writer,
+                    shipper=shipper,
+                    session_id=session_id,
+                    use_llm=not no_llm,
+                    use_mcp=not no_mcp,
+                    guardrail=guard_instance,
+                    step_delay=0.1,
+                    verbose=False,
+                )
+
+                result = loop.run()
+                shipper.flush()
+
+            self._send_json(200, {
+                "scenario": result.scenario,
+                "session_id": result.session_id,
+                "attacks_triggered": result.attacks_triggered,
+                "attacks_detected": result.attacks_detected,
+                "guardrail_blocks": result.guardrail_blocks,
+                "guardrail_method": guardrail_method,
+                "guardrail_model": guardrail_model_name,
+                "total_events": result.total_events,
+                "hec_sent": result.hec_sent,
+                "hec_failed": result.hec_failed,
+                "log_path": result.log_path,
+                "splunk_query": (
+                    f'index={index} session_id="{result.session_id}" '
+                    f'| stats count by event_type, attack_type, guardrail_verdict'
+                ),
+            })
+
+    return AgentHandler
+
+
+@cli.command()
+@click.option("--port",          default=7171, help="Port to listen on  [default: 7171]")
+@click.option("--host",          default="0.0.0.0", help="Interface to bind  [default: 0.0.0.0]")
+@click.option("--scenarios-dir", default=SCENARIOS_DIR)
+@click.option("--log-dir",       default=settings.LOG_DIR)
+@click.option("--hec-url",       default=settings.SPLUNK_HEC_URL)
+@click.option("--hec-token",     default=settings.SPLUNK_HEC_TOKEN)
+@click.option("--index",         default=settings.SPLUNK_INDEX)
+@click.option("--sourcetype",    default=settings.SPLUNK_SOURCETYPE)
+def serve(port, host, scenarios_dir, log_dir, hec_url, hec_token, index, sourcetype):
+    """Start the agent emulator HTTP server for promptfoo integration (port 7171).
+
+    \b
+    Endpoints:
+      GET  /health       Health check
+      GET  /scenarios    List available scenarios
+      POST /run          Run a scenario and return results as JSON
+
+    \b
+    POST /run body (JSON):
+      scenario        string   Required. Scenario name (from /scenarios)
+      guardrail       string   none | heuristic | llamaguard  [default: none]
+      guardrail_model string   Ollama model for llamaguard  [default: llama-guard3:1b]
+      provider        string   ollama | anthropic | openrouter  [default: ollama]
+      model           string   Override default model
+      no_mcp          bool     Use canned MCP responses  [default: false]
+      no_llm          bool     Use canned LLM responses (faster, avoids timeouts)  [default: false]
+      no_splunk       bool     Skip HEC shipping  [default: false]
+    """
+    click.echo(BANNER)
+
+    loader = ScenarioLoader()
+    scenarios = loader.load_all(scenarios_dir)
+    click.echo(f"Loaded {len(scenarios)} scenario(s)")
+    click.echo(f"Listening on http://{host}:{port}")
+    click.echo(f"promptfoo provider URL: http://host.docker.internal:{port}/run")
+    click.echo("\nEndpoints:")
+    click.echo(f"  GET  http://localhost:{port}/health")
+    click.echo(f"  GET  http://localhost:{port}/scenarios")
+    click.echo(f"  POST http://localhost:{port}/run")
+    click.echo("\nPress Ctrl+C to stop.\n")
+
+    handler = _make_handler(scenarios_dir, log_dir, hec_url, hec_token, index, sourcetype)
+
+    # Dual-stack server: binds IPv6 with IPV6_V6ONLY=0 so it also accepts IPv4.
+    # Required because host.docker.internal resolves to IPv6 on Docker Desktop / WSL2.
+    class DualStackServer(HTTPServer):
+        address_family = socket.AF_INET6
+        def server_bind(self):
+            self.socket.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
+            super().server_bind()
+
+    server = DualStackServer(('::', port), handler)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        click.echo("\nServer stopped.")
 
 
 if __name__ == "__main__":

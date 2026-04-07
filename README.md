@@ -192,7 +192,7 @@ The guardrail runs **between the tool response and the main agent LLM**. It eval
 
 ### Setup for LlamaGuard
 
-Pull the model into the running Ollama container once:
+Pull the model into the running Ollama container once: (This is done at Splunk MCP LLM SIEMulator ollama container)
 
 ```bash
 docker exec security-range-ollama ollama pull llama-guard3:1b
@@ -657,6 +657,241 @@ agentic-llm-mcp-threat-emulator/
 
 ---
 
+## Running Tests -- Two Modes
+
+### Mode 1: Standalone (default)
+
+Run scenarios directly from the CLI. No extra services needed.
+
+```bash
+# Run a single scenario
+python main.py run --scenario tool_poisoning --guardrail llamaguard --verbose
+
+# Run all scenarios
+python main.py run --scenario all --guardrail heuristic
+
+# Run without any external calls (fastest, for pipeline testing)
+python main.py run --scenario all --no-llm --no-mcp --no-splunk
+```
+
+Results are printed to the terminal, written to `./logs/agent_<session>.log`, and shipped to Splunk `index=agent`.
+
+---
+
+### Mode 2: Extended with promptfoo (optional)
+
+For operators already running the [splunk-mcp-llm-siemulator](https://github.com/rsfl/splunk-mcp-llm-siemulator) stack, the emulator can expose its scenarios as an HTTP API on port **7171**. This lets the siemulator's existing promptfoo container drive the agentic tests automatically — the same full pipeline (guardrail + HEC + Splunk) runs behind the scenes, but promptfoo handles test orchestration and pass/fail reporting.
+
+```
+promptfoo container (siemulator)
+  └── POST host.docker.internal:7171/run
+        └── AgentLoop (emulator)
+              ├── Attack injection
+              ├── Guardrail (heuristic or LlamaGuard)
+              ├── HEC → Splunk index=agent
+              └── JSON result → promptfoo assertion
+```
+
+**When to use Mode 2:**
+- You want automated pass/fail reporting across all scenarios
+- You want to integrate agentic attack tests into the siemulator's existing promptfoo workflow
+- You want to compare results alongside `owasp-llm-test.yaml` (raw LLM tests) in the same promptfoo report
+
+**Mode 2 is purely additive** -- `python main.py run` continues to work exactly as before.
+
+---
+
+## promptfoo Integration
+
+The emulator exposes an HTTP server on port **7171** for use as a promptfoo provider. This lets the siemulator's promptfoo container run agentic attack tests against the full emulator pipeline (guardrail + HEC shipping + Splunk logging) instead of testing the raw LLM.
+
+### Start the server
+
+```bash
+python main.py serve
+```
+
+Output confirms all endpoints are ready:
+```
+Loaded 12 scenario(s)
+Listening on http://0.0.0.0:7171
+promptfoo provider URL: http://host.docker.internal:7171/run
+
+Endpoints:
+  GET  http://localhost:7171/health
+  GET  http://localhost:7171/scenarios
+  POST http://localhost:7171/run
+```
+
+### Endpoints
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/health` | Health check — returns `{"status":"ok"}` |
+| `GET` | `/scenarios` | List all loaded scenarios with metadata |
+| `POST` | `/run` | Run a scenario, returns JSON result |
+
+**POST /run request body:**
+
+```json
+{
+  "scenario":       "tool_poisoning",
+  "guardrail":      "llamaguard",
+  "guardrail_model":"llama-guard3:1b",
+  "provider":       "ollama",
+  "model":          null,
+  "no_mcp":         true,
+  "no_splunk":      false
+}
+```
+
+**POST /run response:**
+
+```json
+{
+  "scenario":         "tool_poisoning",
+  "session_id":       "34eb1bca-...",
+  "attacks_triggered": 2,
+  "attacks_detected":  2,
+  "guardrail_blocks":  2,
+  "guardrail_method":  "llamaguard",
+  "total_events":      43,
+  "hec_sent":          43,
+  "hec_failed":         0,
+  "splunk_query":      "index=agent session_id=\"34eb1bca-...\" | stats count by event_type, attack_type, guardrail_verdict"
+}
+```
+
+### Step-by-step: Running in Mode 2
+
+**Step 1 — Make sure the siemulator stack is running**
+
+```bash
+# In the splunk-mcp-llm-siemulator directory
+docker-compose up -d
+```
+
+Verify Splunk is at `localhost:8000` and Ollama at `localhost:11434`.
+
+---
+
+**Step 2 — Make sure llama-guard3:1b is pulled (if using LlamaGuard)**
+
+```bash
+docker exec security-range-ollama ollama pull llama-guard3:1b
+```
+
+Skip this step if you plan to use `--guardrail heuristic` only.
+
+---
+
+**Step 3 — Start the emulator server**
+
+In a dedicated terminal inside the `agentic-llm-mcp-threat-emulator` directory:
+
+```bash
+python main.py serve
+```
+
+You should see:
+```
+Loaded 12 scenario(s)
+Listening on http://0.0.0.0:7171
+promptfoo provider URL: http://host.docker.internal:7171/run
+
+Endpoints:
+  GET  http://localhost:7171/health
+  GET  http://localhost:7171/scenarios
+  POST http://localhost:7171/run
+```
+
+Leave this terminal running.
+
+---
+
+**Step 4 — Verify the server is reachable**
+
+```bash
+curl http://localhost:7171/health
+# Expected: {"status": "ok", "port": 7171}
+
+curl http://localhost:7171/scenarios
+# Expected: JSON list of 12 scenarios
+```
+
+---
+
+**Step 5 — Copy the promptfoo config into the siemulator**
+
+```bash
+cp agent-promptfoo-test.yaml /path/to/splunk-mcp-llm-siemulator/
+```
+
+Or mount it into the promptfoo container via `docker-compose.yml` volumes if preferred.
+
+---
+
+**Step 6 — Run the tests**
+
+**All 12 scenarios:**
+```bash
+# From inside the siemulator promptfoo container
+docker exec <promptfoo-container> promptfoo eval -c /path/to/agent-promptfoo-test.yaml
+
+# Or locally if promptfoo/npx is installed
+npx promptfoo eval -c agent-promptfoo-test.yaml
+```
+
+**Single scenario:**
+```bash
+npx promptfoo eval -c agent-promptfoo-test.yaml --filter-description "tool_poisoning"
+```
+
+**All LlamaGuard tests only:**
+```bash
+npx promptfoo eval -c agent-promptfoo-test.yaml --filter-description "LlamaGuard"
+```
+
+---
+
+**Step 7 — Check results in Splunk**
+
+Every promptfoo test run ships events to `index=agent`. Use the `splunk_query` field returned in each test response to pull the exact session:
+
+```spl
+index=agent
+| stats count by event_type, attack_type, guardrail_verdict, guardrail_method
+| sort -count
+```
+
+---
+
+**Step 8 — Stop the server**
+
+Press `Ctrl+C` in the terminal running `python main.py serve`.
+
+### Quick manual test
+
+```bash
+# Health check
+curl http://localhost:7171/health
+
+# List scenarios
+curl http://localhost:7171/scenarios
+
+# Run tool_poisoning with heuristic guardrail
+curl -X POST http://localhost:7171/run \
+  -H "Content-Type: application/json" \
+  -d '{"scenario":"tool_poisoning","guardrail":"heuristic","no_mcp":true}'
+
+# Run customer_service_agent with LlamaGuard
+curl -X POST http://localhost:7171/run \
+  -H "Content-Type: application/json" \
+  -d '{"scenario":"customer_service_agent","guardrail":"llamaguard"}'
+```
+
+---
+
 ## CLI Reference
 
 ```
@@ -667,6 +902,7 @@ Commands:
   list       List all available attack scenarios
   providers  Show available LLM providers and models
   run        Run one or more agentic attack scenarios
+  serve      Start HTTP server for promptfoo integration (port 7171)
   validate   Validate all scenario YAML files
 
 python main.py run --help
@@ -687,6 +923,16 @@ Options:
   --hec-url TEXT          Splunk HEC endpoint
   --hec-token TEXT        Splunk HEC token
   --index TEXT            Splunk index  [default: agent]
+
+python main.py serve --help
+
+Options:
+  --port INTEGER   Port to listen on  [default: 7171]
+  --host TEXT      Interface to bind  [default: 0.0.0.0]
+  --log-dir TEXT   Output directory for NDJSON logs  [default: ./logs]
+  --hec-url TEXT   Splunk HEC endpoint
+  --hec-token TEXT Splunk HEC token
+  --index TEXT     Splunk index  [default: agent]
 ```
 
 ---
