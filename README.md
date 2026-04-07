@@ -2,12 +2,14 @@
 
 **Agentic attack showcase and observability add-on for the [splunk-mcp-llm-siemulator](https://github.com/rsfl/splunk-mcp-llm-siemulator)**
 
-Emulates realistic agentic LLM workflows with injected MITRE ATLAS-mapped attack patterns. Logs everything as NDJSON and ships events to Splunk (`index=agent`) via HEC. Allows operators to analyze different steps of known workflows, create their custom ones and trace attacks end to end. 
+Emulates realistic agentic LLM workflows with injected MITRE ATLAS-mapped attack patterns. Logs everything as NDJSON and ships events to Splunk (`index=agent`) via HEC. Allows operators to analyze different steps of known agentic workflows, create their custom ones and trace attacks end to end. 
 
 ---
-<img width="1874" height="624" alt="AGG1" src="https://github.com/user-attachments/assets/18127036-4b15-41f4-9287-00ab32cb2f41" />
+ <img width="1400" height="518" alt="AGG4" src="https://github.com/user-attachments/assets/cd749feb-d63f-47be-9d75-be0a27cb6630" />
 
-## Architecture
+ 
+##
+Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
