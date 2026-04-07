@@ -5,6 +5,7 @@
 Emulates realistic agentic LLM workflows with injected MITRE ATLAS-mapped attack patterns. Logs everything as NDJSON and ships events to Splunk (`index=agent`) via HEC. Allows operators to analyze different steps of known workflows, create their custom ones and trace attacks end to end. 
 
 ---
+<img width="1874" height="624" alt="AGG1" src="https://github.com/user-attachments/assets/18127036-4b15-41f4-9287-00ab32cb2f41" />
 
 ## Architecture
 
@@ -45,7 +46,7 @@ Emulates realistic agentic LLM workflows with injected MITRE ATLAS-mapped attack
 
 ## Prerequisites
 
-- **splunk-mcp-llm-siemulator** stack running (`docker-compose up -d`)
+- **splunk-mcp-llm-siemulator** stack running (`docker-compose up -d`) https://github.com/rsfl/splunk-mcp-llm-siemulator (Only Windows Version, support for linux version will be added in future versions)
   - Splunk at `localhost:8000` / HEC at `localhost:8088`
   - Ollama at `localhost:11434` with `llama3.2:latest` (only if using Ollama)
   - MCP server at `localhost:3456`
@@ -367,6 +368,11 @@ python main.py run --scenario all --no-llm --no-mcp --no-splunk
 | `hr_recruiting_agent` | AML.T0051.001 | High | Resume injection + agent hijacking |
 | `soc_triage_agent` | AML.T0043.000 | High | Alert payload poisoning + runaway loop |
 | `rag_knowledge_base` | AML.T0051.001 | Critical | KB poisoning + multi-agent propagation |
+
+
+<img width="2026" height="848" alt="AGG2" src="https://github.com/user-attachments/assets/021c6bec-7da3-4a17-bd4c-89172176a001" />
+
+<img width="2680" height="814" alt="AGG3" src="https://github.com/user-attachments/assets/0226526c-45c4-4cc5-bdd0-7c3aa24d4626" />
 
 ---
 
