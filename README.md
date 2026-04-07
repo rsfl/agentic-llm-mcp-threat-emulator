@@ -12,36 +12,44 @@ Emulates realistic agentic LLM workflows with injected MITRE ATLAS-mapped attack
 Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│              Agentic LLM MCP Threat Emulator                    │
-│                                                                 │
-│  main.py (CLI)                                                  │
-│    │                                                            │
-│    ├── ScenarioLoader  ──► scenarios/*.yaml                     │
-│    │                       (12 MITRE ATLAS attack scenarios)    │
-│    │                                                            │
-│    └── AgentLoop (per scenario)                                 │
-│         │                                                       │
-│         ├── OllamaClient      ──► POST :11434/api/generate      │
-│         ├── AnthropicClient   ──► api.anthropic.com/v1/messages │
-│         ├── OpenRouterClient  ──► openrouter.ai/api/v1/...      │
-│         │                                                       │
-│         ├── MCPClient ──────► POST :3456/ (JSON-RPC 2.0)        │
-│         │                                                       │
-│         ├── AttackInjector  (injects payloads at trigger steps) │
-│         │                                                       │
-│         ├── GuardrailAgent ──► heuristic (regex)               │
-│         │                  ──► LlamaGuard 3 1B via Ollama       │
-│         │                                                       │
-│         ├── NDJSONWriter ──► ./logs/agent_<session>.log         │
-│         │                                                       │
-│         └── HECShipper ────► POST :8088/services/collector      │
-│                              index=agent  sourcetype=agent:workflow
-└─────────────────────────────────────────────────────────────────┘
-          │                       │
-          ▼                       ▼
-  splunk-mcp-llm-siemulator    Splunk index=agent
-  (existing stack)             (new -- created by setup)
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    Agentic LLM MCP Threat Emulator                          │
+│                                                                             │
+│  ── Mode 1: CLI ──────────────────────────────────────────────────────────  │
+│  main.py run --scenario <name>                                              │
+│    │                                                                        │
+│    ├── ScenarioLoader  ──► scenarios/*.yaml                                 │
+│    │                       (12 MITRE ATLAS attack scenarios)                │
+│    │                                                                        │
+│    └── AgentLoop (per scenario)                          ┐                  │
+│                                                          │ shared           │
+│  ── Mode 2: HTTP Server (promptfoo integration) ───────  │ ────────────────  │
+│  main.py serve                                           │                  │
+│    │                                                     │                  │
+│    └── HTTP :7171                                        │                  │
+│         ├── GET  /health                                 │                  │
+│         ├── GET  /scenarios                              │                  │
+│         └── POST /run  ──────────────────────────────► AgentLoop           │
+│               ▲                                          │                  │
+│               │ POST host.docker.internal:7171/run       │                  │
+│         promptfoo container                              │                  │
+│         (siemulator stack)                               │                  │
+│                                                          ▼                  │
+│                                          ├── OllamaClient      :11434       │
+│                                          ├── AnthropicClient   (cloud)      │
+│                                          ├── OpenRouterClient  (cloud)      │
+│                                          ├── MCPClient ──────► :3456        │
+│                                          ├── AttackInjector                 │
+│                                          ├── GuardrailAgent                 │
+│                                          │     ├── heuristic (regex)        │
+│                                          │     └── LlamaGuard 3 1B :11434   │
+│                                          ├── NDJSONWriter ► ./logs/         │
+│                                          └── HECShipper  ► :8088 index=agent│
+└─────────────────────────────────────────────────────────────────────────────┘
+          │                                      │
+          ▼                                      ▼
+  splunk-mcp-llm-siemulator             Splunk index=agent
+  (existing stack)                      (new -- created by setup)
 ```
 
 ---
@@ -58,6 +66,8 @@ Architecture
 
 ## Quick Start
 
+### Mode 1 — CLI (standalone, no extra services)
+
 ```bash
 # 1. Install dependencies
 pip install -r requirements.txt
@@ -71,18 +81,35 @@ python main.py setup
 # 4. List all available scenarios
 python main.py list
 
-# 5. List all available LLM providers and free OpenRouter models
-python main.py providers
-
-# 6. Run a specific scenario (see list of scenario names below)
+# 5. Run a specific scenario
 python main.py run --scenario tool_poisoning
 
-# 7. Run all scenarios
-python main.py run --scenario all
+# 6. Run all scenarios with guardrail
+python main.py run --scenario all --guardrail heuristic
 
-# 8. Run without live services (canned responses -- for testing pipeline)
+# 7. Run without live services (canned responses -- for pipeline testing)
 python main.py run --scenario all --no-llm --no-mcp --no-splunk
 ```
+
+### Mode 2 — HTTP server + promptfoo (requires siemulator stack)
+
+```bash
+# 1. Start the emulator as an HTTP server on port 7171
+python main.py serve
+
+# 2. (In the siemulator directory) copy the test config into the promptfoo container
+docker cp agent-promptfoo-test.yaml <promptfoo-container>:/app/agent-promptfoo-test.yaml
+
+# 3. Run all agentic attack tests via promptfoo
+docker exec <promptfoo-container> promptfoo eval -c /app/agent-promptfoo-test.yaml
+
+# 4. Quick manual test without promptfoo
+curl -X POST http://localhost:7171/run \
+  -H "Content-Type: application/json" \
+  -d '{"scenario":"tool_poisoning","guardrail":"heuristic","no_mcp":true}'
+```
+
+> Mode 2 is additive — `python main.py run` continues to work exactly as before.
 
 ---
 
@@ -709,6 +736,7 @@ Endpoints:
   "provider":       "ollama",
   "model":          null,
   "no_mcp":         true,
+  "no_llm":         false,
   "no_splunk":      false
 }
 ```
