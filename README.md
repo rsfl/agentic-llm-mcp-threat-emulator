@@ -5,6 +5,7 @@
 Emulates realistic agentic LLM workflows with injected MITRE ATLAS-mapped attack patterns. Logs everything as NDJSON and ships events to Splunk (`index=agent`) via HEC. Allows operators to analyze different steps of known workflows, create their custom ones and trace attacks end to end. 
 
 ---
+<img width="1874" height="624" alt="AGG1" src="https://github.com/user-attachments/assets/18127036-4b15-41f4-9287-00ab32cb2f41" />
 
 ## Architecture
 
@@ -45,7 +46,7 @@ Emulates realistic agentic LLM workflows with injected MITRE ATLAS-mapped attack
 
 ## Prerequisites
 
-- **splunk-mcp-llm-siemulator** stack running (`docker-compose up -d`)
+- **splunk-mcp-llm-siemulator** stack running (`docker-compose up -d`) https://github.com/rsfl/splunk-mcp-llm-siemulator (Only Windows Version, support for linux version will be added in future versions)
   - Splunk at `localhost:8000` / HEC at `localhost:8088`
   - Ollama at `localhost:11434` with `llama3.2:latest` (only if using Ollama)
   - MCP server at `localhost:3456`
@@ -296,6 +297,7 @@ index=agent event_type=guardrail_check guardrail_blocked=true
 | table _time, session_id, agent_role, pipeline_stage,
         guardrail_method, guardrail_model, guardrail_category, guardrail_reason
 ```
+<img width="2706" height="392" alt="agenticcli6" src="https://github.com/user-attachments/assets/b2983255-058f-4b13-a64a-a178f3d76922" />
 
 ---
 
@@ -350,7 +352,7 @@ python main.py run --scenario all --provider anthropic
 python main.py run --scenario all --no-llm --no-mcp --no-splunk
 ```
 
-### Available scenario names
+### Available scenario names (Mapped to https://atlas.mitre.org/)
 
 | Scenario Name | MITRE ATLAS | Severity | Description |
 |---|---|---|---|
@@ -366,6 +368,11 @@ python main.py run --scenario all --no-llm --no-mcp --no-splunk
 | `hr_recruiting_agent` | AML.T0051.001 | High | Resume injection + agent hijacking |
 | `soc_triage_agent` | AML.T0043.000 | High | Alert payload poisoning + runaway loop |
 | `rag_knowledge_base` | AML.T0051.001 | Critical | KB poisoning + multi-agent propagation |
+
+
+<img width="2026" height="848" alt="AGG2" src="https://github.com/user-attachments/assets/021c6bec-7da3-4a17-bd4c-89172176a001" />
+
+<img width="2680" height="814" alt="AGG3" src="https://github.com/user-attachments/assets/0226526c-45c4-4cc5-bdd0-7c3aa24d4626" />
 
 ---
 
@@ -613,49 +620,8 @@ See `agent-detections.spl` for the full detection query library.
 
 ---
 
-## Project Structure
 
-```
-agentic-llm-mcp-threat-emulator/
-├── main.py                     CLI entrypoint (setup / list / providers / run / validate)
-├── requirements.txt
-├── .env.example                Environment variable template
-├── agent-detections.spl        Splunk detection queries for index=agent
-├── config/
-│   └── settings.py             Connection defaults (HEC, Ollama, MCP, Splunk)
-├── emulator/
-│   ├── agent.py                AgentLoop orchestrator
-│   ├── llm_provider.py         Provider factory (get_llm_client)
-│   ├── ollama_client.py        Direct HTTP to /api/generate
-│   ├── anthropic_client.py     Anthropic Messages API client
-│   ├── openrouter_client.py    OpenRouter (OpenAI-compatible) client
-│   ├── mcp_client.py           JSON-RPC 2.0 client for :3456
-│   ├── scenario_loader.py      YAML scenario parser
-│   └── attack_injector.py      Payload injection + anomaly heuristics
-├── logging_/
-│   ├── event_schema.py         AgentEvent dataclass (NDJSON schema)
-│   ├── ndjson_writer.py        File writer
-│   └── hec_shipper.py          Splunk HEC batch shipper
-├── splunk/
-│   └── index_manager.py        Creates 'agent' index via REST API
-├── scenarios/
-│   ├── TEMPLATE.yaml           Analyst template -- copy this to build custom scenarios
-│   ├── tool_poisoning.yaml
-│   ├── indirect_prompt_injection.yaml
-│   ├── agent_hijacking.yaml
-│   ├── privilege_escalation.yaml
-│   ├── data_exfiltration.yaml
-│   ├── runaway_agent.yaml
-│   ├── multi_agent_compromise.yaml
-│   ├── customer_service_agent.yaml
-│   ├── code_review_agent.yaml
-│   ├── hr_recruiting_agent.yaml
-│   ├── soc_triage_agent.yaml
-│   └── rag_knowledge_base.yaml
-└── logs/                       NDJSON output (runtime)
-```
-
----
+<img width="2688" height="880" alt="agentic7" src="https://github.com/user-attachments/assets/a7d7206f-48ff-4e78-b906-862de84a360a" />
 
 ## Running Tests -- Two Modes
 
