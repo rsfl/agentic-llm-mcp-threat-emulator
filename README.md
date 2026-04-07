@@ -886,6 +886,8 @@ curl -X POST http://localhost:7171/run \
   -d '{"scenario":"customer_service_agent","guardrail":"llamaguard"}'
 ```
 
+<img width="2700" height="402" alt="AGG5" src="https://github.com/user-attachments/assets/61526d92-a015-499a-99e5-459bd95a15c9" />
+
 ---
 
 ## CLI Reference
