@@ -24,6 +24,18 @@ OLLAMA_TAGS    = os.environ.get("OLLAMA_TAGS",  "http://localhost:11434/api/tags
 OLLAMA_MODEL   = os.environ.get("OLLAMA_MODEL", "llama3.2:latest")
 OLLAMA_TIMEOUT = int(os.environ.get("OLLAMA_TIMEOUT", "60"))
 
+# ── Bifrost LLM Gateway ───────────────────────────────────────────────────────
+BIFROST_URL     = os.environ.get("BIFROST_URL",     "http://localhost:8090")
+BIFROST_API_KEY = os.environ.get("BIFROST_API_KEY", "dummy")
+BIFROST_MODEL   = os.environ.get("BIFROST_MODEL",   "ollama/llama3.2")
+BIFROST_TIMEOUT = int(os.environ.get("BIFROST_TIMEOUT", "60"))
+
+# ── LiteLLM Gateway ───────────────────────────────────────────────────────────
+LITELLM_URL     = os.environ.get("LITELLM_URL",     "http://localhost:4001")
+LITELLM_API_KEY = os.environ.get("LITELLM_API_KEY", "sk-litellm-local")
+LITELLM_MODEL   = os.environ.get("LITELLM_MODEL",   "llama3.2")
+LITELLM_TIMEOUT = int(os.environ.get("LITELLM_TIMEOUT", "60"))
+
 # ── MCP server ────────────────────────────────────────────────────────────────
 MCP_URL     = os.environ.get("MCP_URL",     "http://localhost:3456")
 MCP_TIMEOUT = int(os.environ.get("MCP_TIMEOUT", "15"))
