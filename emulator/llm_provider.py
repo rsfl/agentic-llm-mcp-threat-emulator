@@ -20,6 +20,8 @@ DEFAULT_MODELS = {
     "ollama":      "llama3.2:latest",
     "anthropic":   "claude-haiku-4-5-20251001",
     "openrouter":  "meta-llama/llama-3.2-3b-instruct:free",
+    "bifrost":     "ollama/llama3.2",
+    "litellm":     "llama3.2",
 }
 
 OPENROUTER_FREE_MODELS = [
@@ -58,6 +60,8 @@ def get_llm_client(
     model: str | None = None,
     api_key: str | None = None,
     ollama_url: str = "http://localhost:11434",
+    bifrost_url: str = "http://localhost:8090",
+    litellm_url: str = "http://localhost:4001",
     timeout: int = 60,
 ) -> BaseLLMClient:
     """Factory: return the right LLM client for the given provider."""
@@ -70,6 +74,28 @@ def get_llm_client(
             url=f"{ollama_url}/api/generate",
             tags_url=f"{ollama_url}/api/tags",
             model=m,
+            timeout=timeout,
+        )
+
+    if provider == "bifrost":
+        from emulator.gateway_client import GatewayClient
+        key = api_key or os.environ.get("BIFROST_API_KEY", "dummy")
+        return GatewayClient(
+            url=bifrost_url,
+            api_key=key,
+            model=model or DEFAULT_MODELS["bifrost"],
+            provider_name="bifrost",
+            timeout=timeout,
+        )
+
+    if provider == "litellm":
+        from emulator.gateway_client import GatewayClient
+        key = api_key or os.environ.get("LITELLM_API_KEY", "sk-litellm-local")
+        return GatewayClient(
+            url=litellm_url,
+            api_key=key,
+            model=model or DEFAULT_MODELS["litellm"],
+            provider_name="litellm",
             timeout=timeout,
         )
 
@@ -92,5 +118,5 @@ def get_llm_client(
         return OpenRouterClient(model=model or DEFAULT_MODELS["openrouter"], api_key=key, timeout=timeout)
 
     raise ValueError(
-        f"Unknown provider '{provider}'. Choose from: ollama, anthropic, openrouter"
+        f"Unknown provider '{provider}'. Choose from: ollama, bifrost, litellm, anthropic, openrouter"
     )

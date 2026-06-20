@@ -46,11 +46,12 @@ class HECShipper:
         if not self._batch or not self._enabled:
             self._batch.clear()
             return self._sent, self._failed
-        if self._post_batch(self._batch):
-            self._sent += len(self._batch)
-        else:
-            self._failed += len(self._batch)
+        batch = list(self._batch)
         self._batch.clear()
+        if self._post_batch(batch):
+            self._sent += len(batch)
+        else:
+            self._failed += len(batch)
         return self._sent, self._failed
 
     def _post_batch(self, batch: list[AgentEvent]) -> bool:
@@ -64,16 +65,38 @@ class HECShipper:
                 timeout=10,
                 verify=False,
             )
-            if resp.status_code not in (200, 201):
-                print(
-                    f"[HEC] WARNING: {resp.status_code} — {resp.text[:200]}",
-                    file=sys.stderr,
-                )
-                return False
-            return True
+            if resp.status_code in (200, 201):
+                return True
+            # Splunk returns 400 "invalid-event-number:N" when one event in the
+            # batch is malformed/oversized. Fall back to one-by-one so good
+            # events still land and only the bad one is dropped.
+            if resp.status_code == 400 and "invalid-event-number" in resp.text:
+                return self._post_one_by_one(batch)
+            print(f"[HEC] WARNING: {resp.status_code} — {resp.text[:200]}", file=sys.stderr)
+            return False
         except Exception as exc:
             print(f"[HEC] ERROR: {exc}", file=sys.stderr)
             return False
+
+    def _post_one_by_one(self, batch: list[AgentEvent]) -> bool:
+        sent = 0
+        for event in batch:
+            body = event.to_hec_payload(self._index, self._sourcetype)
+            try:
+                resp = requests.post(
+                    self._url,
+                    data=body,
+                    headers=self._headers,
+                    timeout=10,
+                    verify=False,
+                )
+                if resp.status_code in (200, 201):
+                    sent += 1
+                else:
+                    print(f"[HEC] DROP: {resp.status_code} — {resp.text[:120]}", file=sys.stderr)
+            except Exception as exc:
+                print(f"[HEC] ERROR (single): {exc}", file=sys.stderr)
+        return sent > 0
 
     @property
     def stats(self) -> dict:

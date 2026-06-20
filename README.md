@@ -8,8 +8,7 @@ Emulates realistic agentic LLM workflows with injected MITRE ATLAS-mapped attack
  <img width="1400" height="518" alt="AGG4" src="https://github.com/user-attachments/assets/cd749feb-d63f-47be-9d75-be0a27cb6630" />
 
  
-##
-Architecture
+## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -35,30 +34,35 @@ Architecture
 │         promptfoo container                              │                  │
 │         (siemulator stack)                               │                  │
 │                                                          ▼                  │
-│                                          ├── OllamaClient      :11434       │
+│                                          ├── OllamaClient      :11435       │
+│                                          ├── GatewayClient                  │
+│                                          │     ├── Bifrost      :8090       │
+│                                          │     └── LiteLLM      :4001       │
 │                                          ├── AnthropicClient   (cloud)      │
 │                                          ├── OpenRouterClient  (cloud)      │
 │                                          ├── MCPClient ──────► :3456        │
 │                                          ├── AttackInjector                 │
 │                                          ├── GuardrailAgent                 │
 │                                          │     ├── heuristic (regex)        │
-│                                          │     └── LlamaGuard 3 1B :11434   │
+│                                          │     └── LlamaGuard 3 1B :11435   │
 │                                          ├── NDJSONWriter ► ./logs/         │
 │                                          └── HECShipper  ► :8088 index=agent│
 └─────────────────────────────────────────────────────────────────────────────┘
           │                                      │
           ▼                                      ▼
   splunk-mcp-llm-siemulator             Splunk index=agent
-  (existing stack)                      (new -- created by setup)
+  (Linux/Windows stack)                 index=llmgateway (gateway telemetry)
 ```
 
 ---
 
 ## Prerequisites
 
-- **splunk-mcp-llm-siemulator** stack running (`docker-compose up -d`) https://github.com/rsfl/splunk-mcp-llm-siemulator (Only Windows Version, support for linux version will be added in future versions)
+- **splunk-mcp-llm-siemulator** stack running (`docker-compose up -d`) https://github.com/rsfl/splunk-mcp-llm-siemulator
   - Splunk at `localhost:8000` / HEC at `localhost:8088`
-  - Ollama at `localhost:11434` with `llama3.2:latest` (only if using Ollama)
+  - Ollama at `localhost:11435` with `llama3.2:latest` (only if using Ollama directly)
+  - Bifrost LLM Gateway at `localhost:8090` (for `--provider bifrost`)
+  - LiteLLM Gateway at `localhost:4001` (for `--provider litellm`)
   - MCP server at `localhost:3456`
 - Python 3.9+
 
@@ -115,11 +119,19 @@ curl -X POST http://localhost:7171/run \
 
 ## LLM Providers
 
-The emulator supports three LLM backends. Use `--provider` to choose one. The default is `ollama`.
+The emulator supports five LLM backends. Use `--provider` to choose one. The default is `ollama`.
+
+| Provider | Flag | Model default | Requires |
+|---|---|---|---|
+| Ollama | `--provider ollama` | `llama3.2:latest` | Ollama running locally |
+| Bifrost | `--provider bifrost` | `ollama/llama3.2` | Bifrost gateway (siemulator stack) |
+| LiteLLM | `--provider litellm` | `llama3.2` | LiteLLM gateway (siemulator stack) |
+| Anthropic | `--provider anthropic` | `claude-haiku-4-5-20251001` | `ANTHROPIC_API_KEY` |
+| OpenRouter | `--provider openrouter` | `meta-llama/llama-3.2-3b-instruct:free` | `OPENROUTER_API_KEY` |
 
 ### 1. Ollama (local, no API key required)
 
-Requires Ollama running at `localhost:11434` with a model pulled.
+Requires Ollama running at `localhost:11435` with a model pulled.
 
 ```bash
 # Use the default model (llama3.2:latest)
@@ -139,7 +151,49 @@ python main.py setup --provider ollama
 
 ---
 
-### 2. Anthropic API (cloud)
+### 2. Bifrost LLM Gateway (local, no API key required)
+
+Routes LLM calls through the [Bifrost](https://github.com/maximhq/bifrost) gateway running in the siemulator stack. All requests and responses are logged to `index=llmgateway` (sourcetype `llmgateway:bifrost`) in addition to `index=agent`, enabling full cross-index correlation.
+
+```bash
+# Run all scenarios through Bifrost (default model: ollama/llama3.2)
+python main.py run --scenario all --provider bifrost --no-mcp --delay 0.1 \
+  --hec-token 50e334a4-3a58-4e68-bbba-584b82d04b17
+
+# Use a specific model via Bifrost (Bifrost uses provider/model prefix)
+python main.py run --scenario tool_poisoning --provider bifrost --model ollama/llama3.2
+
+# Route to OpenAI via Bifrost (requires OpenAI key configured in Bifrost UI)
+python main.py run --scenario all --provider bifrost --model openai/gpt-4o-mini
+```
+
+> Bifrost gateway UI: `http://localhost:8090`  
+> Events appear in both `index=agent` (agent workflow) and `index=llmgateway` (gateway telemetry).
+
+---
+
+### 3. LiteLLM Gateway (local, no API key required)
+
+Routes LLM calls through the [LiteLLM](https://github.com/BerriAI/litellm) proxy gateway. Events are logged to `index=llmgateway` (sourcetype `llmgateway:litellm`) via a custom callback, alongside `index=agent`.
+
+```bash
+# Run all scenarios through LiteLLM (default model: llama3.2)
+python main.py run --scenario all --provider litellm --no-mcp --delay 0.1 \
+  --hec-token 50e334a4-3a58-4e68-bbba-584b82d04b17
+
+# Single scenario
+python main.py run --scenario data_exfiltration --provider litellm
+
+# Use a different model available in LiteLLM config
+python main.py run --scenario all --provider litellm --model llama3.2
+```
+
+> LiteLLM gateway: `http://localhost:4001`  
+> Events appear in both `index=agent` and `index=llmgateway`.
+
+---
+
+### 4. Anthropic API (cloud)
 
 Requires an API key from [console.anthropic.com](https://console.anthropic.com/).
 
@@ -170,7 +224,7 @@ python main.py run --scenario multi_agent_compromise --provider anthropic --mode
 
 ---
 
-### 3. OpenRouter (cloud, free models available)
+### 5. OpenRouter (cloud, free models available)
 
 Requires an API key from [openrouter.ai/keys](https://openrouter.ai/keys). The free tier requires no billing.
 
@@ -639,10 +693,27 @@ index=agent event_type=attack_triggered
 | stats count by pipeline_stage, attack_type
 | sort -count
 
--- Cross-index correlation with siemulator
-index=mcp OR index=agent
-| eval source_system=if(index="agent","AgentEmulator","SIEMulator")
+-- Cross-index: agent workflows alongside gateway telemetry
+index=agent OR index=llmgateway
+| eval source_system=case(index="agent","AgentEmulator", index="llmgateway","LLMGateway", 1=1,"Other")
 | timechart span=1m count by source_system
+
+-- Gateway provider breakdown for agentic traffic (requires llmgateway index)
+index=llmgateway
+| stats count, avg(llmgateway_latency_ms) as avg_latency_ms,
+        sum(llmgateway_tokens_total) as total_tokens
+  by llmgateway_gateway, llmgateway_model
+| sort -count
+
+-- Cross-index correlation with all siemulator components
+index=mcp OR index=agent OR index=llmgateway OR index=llm
+| eval source_system=case(
+    index="agent",       "AgentEmulator",
+    index="llmgateway",  "LLMGateway",
+    index="mcp",         "MCPServer",
+    index="llm",         "Ollama",
+    1=1, "Other")
+| timechart span=5m count by source_system
 ```
 
 See `agent-detections.spl` for the full detection query library.
@@ -767,7 +838,7 @@ Endpoints:
 docker-compose up -d
 ```
 
-Verify Splunk is at `localhost:8000` and Ollama at `localhost:11434`.
+Verify Splunk is at `localhost:8000` and Ollama at `localhost:11435`.
 
 ---
 
@@ -907,7 +978,7 @@ python main.py run --help
 
 Options:
   --scenario TEXT         Scenario name or 'all'  [default: all]
-  --provider TEXT         ollama | anthropic | openrouter  [default: ollama]
+  --provider TEXT         ollama | bifrost | litellm | anthropic | openrouter  [default: ollama]
   --model TEXT            Override default model for the chosen provider
   --api-key TEXT          API key (or set ANTHROPIC_API_KEY / OPENROUTER_API_KEY)
   --guardrail TEXT        none | heuristic | llamaguard  [default: none]

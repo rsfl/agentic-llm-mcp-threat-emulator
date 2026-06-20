@@ -48,7 +48,7 @@ BANNER = (
     "=============================================================================\n"
     "  AGENTIC LLM MCP THREAT EMULATOR\n"
     "  Agentic Attack Showcase for Splunk + MITRE ATLAS\n"
-    "  Providers: Ollama (local) | Anthropic API | OpenRouter\n"
+    "  Providers: Ollama | Bifrost | LiteLLM | Anthropic | OpenRouter\n"
     "=============================================================================\n"
 )
 
@@ -69,7 +69,7 @@ def cli() -> None:
 @click.option("--password",  default=settings.SPLUNK_PASSWORD)
 @click.option("--hec-url",   default=settings.SPLUNK_HEC_URL)
 @click.option("--hec-token", default=settings.SPLUNK_HEC_TOKEN)
-@click.option("--provider",  default="ollama", type=click.Choice(["ollama","anthropic","openrouter"], case_sensitive=False))
+@click.option("--provider",  default="ollama", type=click.Choice(["ollama","bifrost","litellm","anthropic","openrouter"], case_sensitive=False))
 @click.option("--api-key",   default=None, envvar=["ANTHROPIC_API_KEY","OPENROUTER_API_KEY"])
 def setup(rest_url, user, password, hec_url, hec_token, provider, api_key) -> None:
     """Create the Splunk 'agent' index and verify all connectivity."""
@@ -89,7 +89,11 @@ def setup(rest_url, user, password, hec_url, hec_token, provider, api_key) -> No
     # LLM provider
     click.echo(f"[ ] Checking LLM provider ({provider})...")
     try:
-        llm = get_llm_client(provider, api_key=api_key)
+        llm = get_llm_client(
+            provider, api_key=api_key,
+            bifrost_url=settings.BIFROST_URL,
+            litellm_url=settings.LITELLM_URL,
+        )
         llm_ok = llm.is_available()
         click.echo(f"  {'[OK]' if llm_ok else '[WARN]'} {llm.model} via {provider}")
         if not llm_ok:
@@ -140,6 +144,16 @@ def providers(api_key) -> None:
     click.echo(f"    URL           : {settings.OLLAMA_URL}")
     click.echo(f"    Flag          : --provider ollama\n")
 
+    click.echo("  bifrost     (LLM gateway, local)")
+    click.echo(f"    Default model : {DEFAULT_MODELS['bifrost']}")
+    click.echo(f"    URL           : {settings.BIFROST_URL}")
+    click.echo(f"    Flag          : --provider bifrost\n")
+
+    click.echo("  litellm     (LLM gateway, local)")
+    click.echo(f"    Default model : {DEFAULT_MODELS['litellm']}")
+    click.echo(f"    URL           : {settings.LITELLM_URL}")
+    click.echo(f"    Flag          : --provider litellm\n")
+
     click.echo("  anthropic   (cloud, requires ANTHROPIC_API_KEY)")
     click.echo(f"    Default model : {DEFAULT_MODELS['anthropic']}")
     click.echo(f"    Other models  : claude-opus-4-6, claude-sonnet-4-6, claude-haiku-4-5-20251001")
@@ -177,7 +191,7 @@ def providers(api_key) -> None:
 @click.option("--index",         default=settings.SPLUNK_INDEX)
 @click.option("--sourcetype",    default=settings.SPLUNK_SOURCETYPE)
 @click.option("--provider",      default="ollama",
-              type=click.Choice(["ollama","anthropic","openrouter"], case_sensitive=False),
+              type=click.Choice(["ollama","bifrost","litellm","anthropic","openrouter"], case_sensitive=False),
               help="LLM backend to use")
 @click.option("--model",         default=None,
               help="Override default model for the chosen provider")
@@ -212,6 +226,8 @@ def run(
             model=model,
             api_key=api_key,
             ollama_url=settings.OLLAMA_URL.replace("/api/generate", ""),
+            bifrost_url=settings.BIFROST_URL,
+            litellm_url=settings.LITELLM_URL,
             timeout=settings.OLLAMA_TIMEOUT,
         )
     except ValueError as exc:
