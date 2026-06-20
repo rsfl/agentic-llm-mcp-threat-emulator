@@ -15,7 +15,47 @@ Emulates realistic agentic LLM workflows with injected MITRE ATLAS-mapped attack
 
 
 ```
-
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    Agentic LLM MCP Threat Emulator                          │
+│                                                                             │
+│  ── Mode 1: CLI ──────────────────────────────────────────────────────────  │
+│  main.py run --scenario <name>                                              │
+│    │                                                                        │
+│    ├── ScenarioLoader  ──► scenarios/*.yaml                                 │
+│    │                       (12 MITRE ATLAS attack scenarios)                │
+│    │                                                                        │
+│    └── AgentLoop (per scenario)                          ┐                  │
+│                                                          │ shared           │
+│  ── Mode 2: HTTP Server (promptfoo integration) ───────  │ ────────────────  │
+│  main.py serve                                           │                  │
+│    │                                                     │                  │
+│    └── HTTP :7171                                        │                  │
+│         ├── GET  /health                                 │                  │
+│         ├── GET  /scenarios                              │                  │
+│         └── POST /run  ──────────────────────────────► AgentLoop           │
+│               ▲                                          │                  │
+│               │ POST host.docker.internal:7171/run       │                  │
+│         promptfoo container                              │                  │
+│         (siemulator stack)                               │                  │
+│                                                          ▼                  │
+│                                          ├── OllamaClient      :11434       │
+│                                          ├── GatewayClient                  │
+│                                          │     ├── Bifrost      :8090       │
+│                                          │     └── LiteLLM      :4001       │
+│                                          ├── AnthropicClient   (cloud)      │
+│                                          ├── OpenRouterClient  (cloud)      │
+│                                          ├── MCPClient ──────► :3456        │
+│                                          ├── AttackInjector                 │
+│                                          ├── GuardrailAgent                 │
+│                                          │     ├── heuristic (regex)        │
+│                                          │     └── LlamaGuard 3 1B :11434   │
+│                                          ├── NDJSONWriter ► ./logs/         │
+│                                          └── HECShipper  ► :8088 index=agent│
+└─────────────────────────────────────────────────────────────────────────────┘
+          │                                      │
+          ▼                                      ▼
+  splunk-mcp-llm-siemulator             Splunk index=agent
+  (existing stack)                      index=llmgateway (gateway telemetry)
 ---
 
 ## Prerequisites
