@@ -1,6 +1,6 @@
 # Agentic LLM MCP Threat Emulator by Rod Soto
 
-**Agentic attack showcase and observability add-on for the [splunk-mcp-llm-siemulator](https://github.com/rsfl/splunk-mcp-llm-siemulator)**
+**Agentic attack showcase and observability add-on for the [splunk-mcp-llm-siemulator-linux](https://github.com/rsfl/splunk-mcp-llm-siemulator-linux)**
 
 Emulates realistic agentic LLM workflows with injected MITRE ATLAS-mapped attack patterns. Logs everything as NDJSON and ships events to Splunk (`index=agent`) via HEC. Allows operators to analyze different steps of known agentic workflows, create their custom ones and trace attacks end to end. 
 
