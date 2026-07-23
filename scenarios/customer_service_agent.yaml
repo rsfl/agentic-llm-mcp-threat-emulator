@@ -110,7 +110,7 @@ attack_steps:
 
   - step: 4
     attack_type: data_exfiltration
-    mitre_technique: "AML.T0024.000"
+    mitre_technique: "AML.T0086"
     severity: critical
     target: tool_response
     description: >

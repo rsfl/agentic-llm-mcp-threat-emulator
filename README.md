@@ -399,7 +399,7 @@ Output shows name, MITRE technique, agent role, and step count:
 ```
 NAME                                TECHNIQUE            ROLE                           STEPS
 -----------------------------------------------------------------------------------------------
-tool_poisoning                      AML.T0051.000        ...                                6
+tool_poisoning                      AML.T0110             ...                                6
 indirect_prompt_injection           AML.T0051.001        ...                                6
 agent_hijacking                     AML.T0054.000        ...                                6
 ...
@@ -441,17 +441,17 @@ python main.py run --scenario all --no-llm --no-mcp --no-splunk
 
 | Scenario Name | MITRE ATLAS | Severity | Description |
 |---|---|---|---|
-| `tool_poisoning` | AML.T0051.000 | Critical | Tool response hijacks agent objective |
+| `tool_poisoning` | AML.T0110 | Critical | Tool response hijacks agent objective |
 | `indirect_prompt_injection` | AML.T0051.001 | High | Injection embedded in fetched content |
 | `agent_hijacking` | AML.T0054.000 | Critical | DAN-style persona override |
-| `privilege_escalation` | AML.T0056.000 | Critical | Tool-chaining to escalate access |
-| `data_exfiltration` | AML.T0024.000 | Critical | Agent redirected to exfiltrate data |
-| `runaway_agent` | AML.T0043.000 | High | Infinite loop / model DoS |
-| `multi_agent_compromise` | AML.T0048.000 | Critical | Lateral movement via agent-to-agent injection |
+| `privilege_escalation` | AML.T0053 | Critical | Tool-chaining to escalate access |
+| `data_exfiltration` | AML.T0086 | Critical | Agent redirected to exfiltrate data |
+| `runaway_agent` | AML.T0034.002 | High | Infinite loop / model DoS |
+| `multi_agent_compromise` | AML.T0099 | Critical | Lateral movement via agent-to-agent injection |
 | `customer_service_agent` | AML.T0051.001 | High | CRM injection + data exfiltration |
-| `code_review_agent` | AML.T0051.000 | Critical | Tool poisoning in PR diff + privilege escalation |
+| `code_review_agent` | AML.T0110 | Critical | Tool poisoning in PR diff + privilege escalation |
 | `hr_recruiting_agent` | AML.T0051.001 | High | Resume injection + agent hijacking |
-| `soc_triage_agent` | AML.T0043.000 | High | Alert payload poisoning + runaway loop |
+| `soc_triage_agent` | AML.T0034.002 | High | Alert payload poisoning + runaway loop |
 | `rag_knowledge_base` | AML.T0051.001 | Critical | KB poisoning + multi-agent propagation |
 
 
@@ -637,7 +637,7 @@ Every event written to `./logs/agent_<session>.log` and shipped to `index=agent`
   "pipeline_stage": "lookup",
   "pipeline_status": "hijacked",
   "attack_type": "tool_poisoning",
-  "mitre_atlas_technique": "AML.T0051.000",
+  "mitre_atlas_technique": "AML.T0110",
   "severity": "high",
   "data_classification": "confidential",
   "data_source": "crm_api",

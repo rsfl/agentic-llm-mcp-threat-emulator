@@ -2,8 +2,8 @@ name: tool_poisoning
 description: >
   Malicious tool response hijacks agent decision-making. The MCP tool returns
   a response containing hidden instructions that redirect the agent's behavior.
-  Maps to MITRE ATLAS AML.T0051 — LLM Prompt Injection via manipulated tool output.
-mitre_atlas_technique: "AML.T0051.000"
+  Maps to MITRE ATLAS AML.T0110 — AI Agent Tool Poisoning.
+mitre_atlas_technique: "AML.T0110"
 tags:
   - tool-poisoning
   - prompt-injection
@@ -26,7 +26,7 @@ benign_prompts:
 attack_steps:
   - step: 2
     attack_type: tool_poisoning
-    mitre_technique: "AML.T0051.000"
+    mitre_technique: "AML.T0110"
     severity: high
     target: tool_response
     description: >
@@ -39,7 +39,7 @@ attack_steps:
 
   - step: 4
     attack_type: tool_poisoning
-    mitre_technique: "AML.T0051.000"
+    mitre_technique: "AML.T0110"
     severity: critical
     target: tool_response
     description: >
