@@ -41,7 +41,7 @@ index=agent mitre_atlas_technique=*
 | sort -count
 
 
--- ── Tool Poisoning (AML.T0051.000) ───────────────────────────────────────
+-- ── Tool Poisoning (AML.T0110) ───────────────────────────────────────────
 
 index=agent attack_type=tool_poisoning
 | table _time, session_id, step_number, tool_name, tool_result, severity
@@ -75,7 +75,7 @@ index=agent event_type=agent_step
 | table _time, session_id, step_number, prompt
 
 
--- ── Privilege Escalation (AML.T0056.000) ─────────────────────────────────
+-- ── Privilege Escalation (AML.T0053) ──────────────────────────────────────
 
 index=agent attack_type=privilege_escalation
 | table _time, session_id, step_number, tool_name, tool_args, tool_result
@@ -86,7 +86,7 @@ index=agent
 | table _time, session_id, event_type, tool_name, tool_args, tool_result
 
 
--- ── Data Exfiltration (AML.T0024.000) ────────────────────────────────────
+-- ── Data Exfiltration (AML.T0086) ─────────────────────────────────────────
 
 index=agent attack_type=data_exfiltration
 | table _time, session_id, step_number, tool_result, severity
@@ -97,7 +97,7 @@ index=agent
 | table _time, session_id, event_type, tool_result
 
 
--- ── Runaway Agent (AML.T0043.000) ────────────────────────────────────────
+-- ── Runaway Agent (AML.T0034.002) ─────────────────────────────────────────
 
 index=agent attack_type=runaway_agent
 | table _time, session_id, step_number, prompt, tool_result
@@ -108,7 +108,7 @@ index=agent event_type=agent_step
 | table _time, session_id, step_number, prompt
 
 
--- ── Multi-Agent Compromise (AML.T0048.000) ───────────────────────────────
+-- ── Multi-Agent Compromise (AML.T0099) ────────────────────────────────────
 
 index=agent attack_type=multi_agent_compromise
 | table _time, session_id, agent_id, step_number, prompt, tool_result

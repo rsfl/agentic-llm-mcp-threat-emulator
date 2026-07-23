@@ -25,14 +25,15 @@ description: >
   and what is the impact.
 
 mitre_atlas_technique: "AML.T0051.000"
-# Common techniques:
-#   AML.T0051.000  LLM Prompt Injection (direct)
-#   AML.T0051.001  LLM Prompt Injection (indirect -- via external content)
+# Common techniques (verified against the official ATLAS catalog):
+#   AML.T0051.000  LLM Prompt Injection: Direct
+#   AML.T0051.001  LLM Prompt Injection: Indirect (via external content)
 #   AML.T0054.000  LLM Jailbreak / Agent Hijacking
-#   AML.T0056.000  LLM Plugin Compromise / Privilege Escalation
-#   AML.T0024.000  Exfiltration via ML Inference API
-#   AML.T0043.000  Craft Adversarial Data / Runaway Agent / Model DoS
-#   AML.T0048.000  Backdoor ML Model / Multi-Agent Lateral Movement
+#   AML.T0053      AI Agent Tool Invocation (privilege escalation via tools)
+#   AML.T0086      Exfiltration via AI Agent Tool Invocation
+#   AML.T0034.002  Agentic Resource Consumption (runaway agent / model DoS)
+#   AML.T0110      AI Agent Tool Poisoning
+#   AML.T0099      AI Agent Tool Data Poisoning (incl. multi-agent lateral spread)
 
 tags:
   - your-workflow-type       # e.g. customer-service, code-review, hr, soc, rag
@@ -260,7 +261,7 @@ attack_steps:
   # Add a second attack step to model chained/escalating attacks:
   # - step: 3
   #   attack_type: privilege_escalation
-  #   mitre_technique: "AML.T0056.000"
+  #   mitre_technique: "AML.T0053"
   #   severity: critical
   #   target: tool_response
   #   description: >

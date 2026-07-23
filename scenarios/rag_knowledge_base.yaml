@@ -124,7 +124,7 @@ attack_steps:
 
   - step: 3
     attack_type: multi_agent_compromise
-    mitre_technique: "AML.T0048.000"
+    mitre_technique: "AML.T0099"
     severity: high
     target: tool_response
     description: >
